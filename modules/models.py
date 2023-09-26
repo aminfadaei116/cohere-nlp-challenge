@@ -258,10 +258,10 @@ class Softmax(torch.nn.Module):
 
 
 class BertClassifier(nn.Module):
-    def __init__(self, pretrained_model: nn.Module, pool: str, max_length: int, num_class: int):
+    def __init__(self, pretrained_model: nn.Module, pool: str, max_length: int, num_labels: int):
         super(BertClassifier, self).__init__()
         self.pretrained_model = pretrained_model
-        self.softmax_classifier = Softmax(max_length * 3, num_class)
+        self.softmax_classifier = Softmax(max_length * 3, num_labels)
         self.sf = nn.Softmax(dim=1)
         assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
         self.pool = pool
@@ -284,3 +284,18 @@ class BertClassifier(nn.Module):
     # TODO: add __init__ to construct BERTClassifier based on given pretrained BERT
     # TODO: add code for forward pass that returns the loss value
     # TODO: add aditional method if required
+
+
+ #TODO: add code to load NLI dataset in required format
+ ###    if load_nli_dataset(..) is not appropriate for your method
+
+class BertContrastive(nn.Module):
+    def __init__(self):
+        super(BertContrastive, self).__init__()
+        pass
+
+    def forward(self):
+        pass
+    #TODO: add __init__ to construct BertContrastive based on given pretrained BERT
+    #TODO: add code for forward pass that returns the loss value
+    #TODO: add aditional method if required
