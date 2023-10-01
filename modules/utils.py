@@ -59,7 +59,11 @@ def cosine_sim(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     :return similarity: torch.Tensor [B, B]
         The similarity matrix showing the similarity between vectors
     """
-    similarity = a@b.T / (torch.linalg.vector_norm(a, dim=1) * torch.linalg.vector_norm(b, dim=1))
+    import numpy as np
+    from numpy.linalg import norm
+
+    L2_norm = torch.linalg.vector_norm(a, dim=1).unsqueeze(1)@torch.linalg.vector_norm(b, dim=1).unsqueeze(0)
+    similarity = (a@b.T) / L2_norm
     return similarity
 
 
@@ -70,21 +74,24 @@ def eval_loop(model: nn.Module, eval_dataloader: DataLoader, device: str):
     model = model.eval()
     model_name = model.__class__.__name__
     for score, sentence1, sentence2 in tqdm(eval_dataloader):
-        assert model_name == 'BertClassifier' or model_name == 'BertModel' or model_name == 'Bert', \
-            'Model type not valid!'
+        assert model_name == 'BertClassifier' or model_name == 'BertModel' or model_name == 'Bert' or model_name == \
+               'BertContrastive', 'Model type not valid!'
         sentence1 = convert_list(sentence1, device)  # [sentence1[0].to(device), sentence1[1].to(device)]
         sentence2 = convert_list(sentence2, device)  # [sentence2[0].to(device), sentence2[1].to(device)]
 
         if model_name == 'BertClassifier':
-            predict_score.append(torch.argmax(model(sentence1, sentence2), dim=1).cpu())
-            ground_score.append(score)
+            predict_score.append(torch.argmax(model(sentence1, sentence2), dim=1).detach().cpu())
+            ground_score.append(score.detach().cpu())
+        elif model_name == 'BertContrastive':
+            predict_score.append(model(sentence1, sentence2).detach().cpu())
+            ground_score.append(score.detach().cpu())
         elif model_name == 'BertModel' or model_name == 'Bert':
             sentence1_embed = model(input_ids=sentence1[0].to(device), attention_mask=sentence1[1].to(device))[1].cpu()
             sentence2_embed = model(input_ids=sentence2[0].to(device), attention_mask=sentence2[1].to(device))[1].cpu()
 
             cosine_similarity = cosine_sim(sentence1_embed, sentence2_embed)
             predict_score.append(torch.diagonal(cosine_similarity).detach())
-            ground_score.append(score)
+            ground_score.append(score.detach())
 
     predict_score = torch.cat(predict_score).detach().numpy()
     ground_score = torch.cat(ground_score).detach().numpy()
@@ -109,13 +116,18 @@ def load_nli_dataset(file_name: str):
 def train_loop(model, optimizer, train_dataloader, num_epochs, device):
 
     # Cross-Entropy Loss example
-    loss_function = nn.CrossEntropyLoss()
+    assert model.model_type == 'classification' or model.model_type == 'regression', "Model type not valid!"
+    if model.model_type == 'classification':
+        loss_function = nn.CrossEntropyLoss()
+    elif model.model_type == 'regression':
+        loss_function = nn.MSELoss()
 
     model.to(device)
     for _ in tqdm(range(num_epochs)):
         for label, sentence1, sentence2 in train_dataloader:
             label = label.to(device)
-
+            if model.model_type == 'regression':
+                label = label.float() - 1.0
             sentence1 = convert_list(sentence1, device) #[sentence1[0].to(device), sentence1[1].to(device)]
             sentence2 = convert_list(sentence2, device) #[sentence2[0].to(device), sentence2[1].to(device)]
 

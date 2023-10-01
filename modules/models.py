@@ -3,6 +3,7 @@ import math
 from collections import OrderedDict
 import torch
 from torch import nn, Tensor
+from modules.utils import cosine_sim
 from typing import Union, Tuple, List, Iterable, Dict
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
@@ -22,12 +23,6 @@ def gelu(x):
     :param x:
     :return:
     """
-
-    """
-    We could have used the torch Gelu activation function
-    """
-    m = nn.GELU()
-    test = m(x)
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
@@ -78,20 +73,21 @@ class LayerNorm(nn.Module):
         :return normalized: torch.Tensor
             The normalized tensor in the LayerNorm
         """
-        mean = x.mean(dim=-1, keepdim=True)
-        var = ((x - mean) ** 2).mean(dim=-1, keepdim=True)
-        std = (var + self.variance_epsilon).sqrt()
-        y = (x - mean) / std
-        normalized = self.gamma * y + self.beta
-        return normalized
-
         """
-        # This code has some bugs
+        Bug #1,2,3
+        Code Edit
         u = x.mean(0, keepdim=True)
         s = (x + u).pow(2).mean(0, keepdim=True)
         x = (x + u) / torch.sqrt(s + self.variance_epsilon)
         return self.gamma * x + self.beta
         """
+        mean = x.mean(dim=-1, keepdim=True)  # Edited line #1
+        var = ((x - mean).pow(2)).mean(dim=-1, keepdim=True)  # Edited line #2
+        std = (var + self.variance_epsilon).sqrt()  # Edited line #3
+        y = (x - mean) / std
+        return self.gamma * y + self.beta
+
+
 
 
 class MLP(nn.Module):
@@ -122,10 +118,14 @@ class Layer(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-        # BertSelfAttention ends here
-
-        self.attn_out = nn.Linear(config.hidden_size, config.hidden_size)
+        """
+        Bug #4
+        Replace
+        >>
+        self.attn_out = nn.Linear(config.hidden_size, config.hidden_size) -> 
+        self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)
+        """
+        self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)  # Edited line #4
         self.ln1 = LayerNorm(config.hidden_size)
 
         # BertSelfOut ends here
@@ -147,18 +147,29 @@ class Layer(nn.Module):
         mask = mask.unsqueeze(1).unsqueeze(2)
 
         """
-        Replace
+        Bug #5
         >>
         s = torch.matmul(q, k) -> s = torch.matmul(q, k.transpose(-1, -2))
         """
-        s = torch.matmul(q, k.transpose(-1, -2))
-        # s = torch.matmul(q, k)
+        s = torch.matmul(q, k.transpose(-1, -2))  # Edited line #5
 
         s = s / math.sqrt(self.attention_head_size)
 
-        # s = torch.where(mask, s, torch.tensor(float('inf')))
+        """
+        Bug #6
+        >>
+        s = torch.where(mask, s, torch.tensor(float('inf'))) -> 
+        s = torch.where(mask, s, torch.tensor(float('-inf')))
+        """
+        s = torch.where(mask, s, torch.tensor(float('-inf')))  # Edited line #6
 
-        p = s
+        """
+        Bug #7
+        >>
+        p = s -> 
+        p = nn.functional.softmax(s, dim=-1)
+        """
+        p = nn.functional.softmax(s, dim=-1)  # Edited line #7
         p = self.dropout(p)
 
         a = torch.matmul(p, v)
@@ -256,17 +267,20 @@ class Softmax(torch.nn.Module):
         output = self.linear(x)
         return output
 
-
 class BertClassifier(nn.Module):
     def __init__(self, pretrained_model: nn.Module, pool: str, max_length: int, num_labels: int):
         super(BertClassifier, self).__init__()
+        pretrained_model.requires_grad = True
         self.pretrained_model = pretrained_model
+
         self.softmax_classifier = Softmax(max_length * 3, num_labels)
         self.sf = nn.Softmax(dim=1)
         assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
         self.pool = pool
+        self.model_type = 'classification'
 
     def forward(self, sentence1, sentence2):
+
         sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
         sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
         if self.pool == 'max':
@@ -281,21 +295,33 @@ class BertClassifier(nn.Module):
         output = self.sf(output)
         return output
 
-    # TODO: add __init__ to construct BERTClassifier based on given pretrained BERT
-    # TODO: add code for forward pass that returns the loss value
-    # TODO: add aditional method if required
-
-
- #TODO: add code to load NLI dataset in required format
- ###    if load_nli_dataset(..) is not appropriate for your method
 
 class BertContrastive(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained_model: nn.Module, pool: str, max_length: int, num_labels: int):
         super(BertContrastive, self).__init__()
+        self.pretrained_model = pretrained_model
+        assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
+        self.pool = pool
+        self.model_type = 'regression'
+
+
+    def forward(self, sentence1, sentence2):
+        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
+        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
+        if self.pool == 'max':
+            sentence1_embed = torch.max(sentence1_embed, dim=2)
+            sentence2_embed = torch.max(sentence2_embed, dim=2)
+        elif self.pool == 'mean':
+            sentence1_embed = sentence1_embed.mean(2)
+            sentence2_embed = sentence2_embed.mean(2)
+        cosine_similarity = cosine_sim(sentence1_embed, sentence2_embed)
+        return torch.diagonal(cosine_similarity)
+
+
+class EmbedingClassifier(nn.Module):
+    def __init__(self):
+        super(EmbedingClassifier).__init__()
         pass
 
     def forward(self):
         pass
-    #TODO: add __init__ to construct BertContrastive based on given pretrained BERT
-    #TODO: add code for forward pass that returns the loss value
-    #TODO: add aditional method if required
