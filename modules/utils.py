@@ -141,7 +141,7 @@ def train_loop(model, optimizer, train_dataloader, num_epochs, device):
 
 def convert_list(source_list: List, device: str) -> List:
     """
-    Convert the list to device (cpu or cuda)
+    Convert the list to device (cpu or cuda), since the
     :param source_list: List
         The initial list
     :param device: str

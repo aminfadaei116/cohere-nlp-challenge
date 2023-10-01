@@ -346,4 +346,3 @@ class EmbedingClassifier(nn.Module):
 
     def forward(self, embedding):
         pass
-    
