@@ -284,8 +284,8 @@ class BertClassifier(nn.Module):
         sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
         sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
         if self.pool == 'max':
-            sentence1_embed = torch.max(sentence1_embed, dim=2)
-            sentence2_embed = torch.max(sentence2_embed, dim=2)
+            sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
+            sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
         elif self.pool == 'mean':
             sentence1_embed = sentence1_embed.mean(2)
             sentence2_embed = sentence2_embed.mean(2)
@@ -309,8 +309,8 @@ class BertContrastive(nn.Module):
         sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
         sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
         if self.pool == 'max':
-            sentence1_embed = torch.max(sentence1_embed, dim=2)
-            sentence2_embed = torch.max(sentence2_embed, dim=2)
+            sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
+            sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
         elif self.pool == 'mean':
             sentence1_embed = sentence1_embed.mean(2)
             sentence2_embed = sentence2_embed.mean(2)
@@ -318,10 +318,32 @@ class BertContrastive(nn.Module):
         return torch.diagonal(cosine_similarity)
 
 
+class SupremeBert(nn.Module):
+    def __init__(self, pretrained_model: nn.Module, pool: str):
+        super(SupremeBert).__init__()
+        self.pretrained_model = pretrained_model
+        assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
+        self.pool = pool
+
+    def forward(self, sentence1, sentence2):
+        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
+        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
+        if self.pool == 'max':
+            sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
+            sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
+        elif self.pool == 'mean':
+            sentence1_embed = sentence1_embed.mean(2)
+            sentence2_embed = sentence2_embed.mean(2)
+
+        embedding = torch.cat([sentence1_embed, sentence2_embed, torch.abs(sentence1_embed - sentence2_embed)], dim=1)
+        return embedding
+
+
 class EmbedingClassifier(nn.Module):
-    def __init__(self):
+    def __init__(self, input_channel: int, output_channel: int):
         super(EmbedingClassifier).__init__()
         pass
 
-    def forward(self):
+    def forward(self, embedding):
         pass
+    

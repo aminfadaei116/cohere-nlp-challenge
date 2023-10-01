@@ -166,13 +166,12 @@ def main4():
     # bert.train()
 
     ###    Replace None with required input based on yor implementation
-    bert_contrastive = BertContrastive(bert, pool="mean", max_length=128, num_labels=3)
+    bert_contrastive = BertContrastive(bert, pool="max", max_length=128, num_labels=3)
 
     # INFO: create optimizer and run training loop
     optimizer = AdamW(bert_contrastive.parameters(), lr=5e-5)
     train_loop(bert_contrastive, optimizer, train_dataloader, num_epochs, device)
 
-    # TODO: run evaluation loop
     tokenized_test = tokenize_sentence_pair_dataset(nli_dataset['test'], tokenizer, max_length=128)
 
     # INFO: generate train_dataloader
@@ -188,5 +187,5 @@ def main4():
 if __name__ == "__main__":
     # main()
     # main2()
-    main3()
+    # main3()
     main4()
