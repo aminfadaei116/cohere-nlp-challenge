@@ -248,6 +248,6 @@ def plot_results():
 if __name__ == "__main__":
     # main()
     # main2()
-    main3()
-    # main4()
+    # main3()
+    main4()
     # main5()

@@ -330,7 +330,7 @@ class BertClassifier(nn.Module):
 
 
 class BertContrastive(nn.Module):
-    def __init__(self, pretrained_model: nn.Module, pool: str):
+    def __init__(self, pretrained_model: nn.Module, pool: str = None):
         super(BertContrastive, self).__init__()
         pretrained_model.requires_grad = True
         self.pretrained_model = pretrained_model
