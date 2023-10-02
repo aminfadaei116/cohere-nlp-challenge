@@ -99,7 +99,7 @@ def main3():
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
-                   "vocab_size": 30522}
+                   "vocab_size": 30522, "dropout_prob": 0}
     bert_path = 'bert_tiny.bin'
 
     # INFO: load nli dataset
@@ -116,8 +116,8 @@ def main3():
 
     bert = Bert(bert_config).load_model('bert_tiny.bin')
     # bert = AutoModel.from_pretrained(model_name)
-    bert.eval()
-    # bert.train()
+    # bert.eval()
+    bert.train()
     bert_classifier = BertClassifier(bert, max_length=128, num_labels=num_labels)
 
     # INFO: create optimizer and run training loop
@@ -248,6 +248,6 @@ def plot_results():
 if __name__ == "__main__":
     # main()
     # main2()
-    # main3()
-    main4()
+    main3()
+    # main4()
     # main5()
