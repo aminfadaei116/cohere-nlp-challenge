@@ -122,7 +122,7 @@ def eval_loop(model: nn.Module, eval_dataloader: DataLoader, device: str) -> Lis
             # sentence2_embed = torch.mean(model(input_ids=sentence2[0].to(device), attention_mask=sentence2[1].to(device))[0], dim=2).cpu()
 
             cosine_similarity = cosine_sim(sentence1_embed, sentence2_embed)
-            predict_score.append(torch.diagonal(cosine_similarity).detach() * 2 + 3)
+            predict_score.append(torch.diagonal(cosine_similarity).detach())
             ground_score.append(score.detach())
 
     predict_score = torch.cat(predict_score).detach().numpy()

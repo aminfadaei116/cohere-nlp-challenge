@@ -20,6 +20,7 @@ class Config(object):
     """
     A Configuration model containing all the configuration hyper-parameters
     """
+
     def __init__(self,
                  vocab_size,
                  hidden_size=768,
@@ -287,10 +288,10 @@ class Softmax(torch.nn.Module):
     def __init__(self, input_channel, output_channel):
         super(Softmax, self).__init__()
         self.layers = nn.Sequential(
-                  torch.nn.Linear(input_channel, int(input_channel/2)),
-                  nn.ReLU(),
-                  torch.nn.Linear(int(input_channel/2), output_channel),
-                )
+            torch.nn.Linear(input_channel, int(input_channel / 2)),
+            nn.ReLU(),
+            torch.nn.Linear(int(input_channel / 2), output_channel),
+        )
 
     def forward(self, x):
         output = self.layers(x)
@@ -298,27 +299,29 @@ class Softmax(torch.nn.Module):
 
 
 class BertClassifier(nn.Module):
-    def __init__(self, pretrained_model: nn.Module, pool: str, max_length: int, num_labels: int):
+    def __init__(self, pretrained_model: nn.Module, max_length: int, num_labels: int, pool: str = None):
         super(BertClassifier, self).__init__()
         pretrained_model.requires_grad = True
         self.pretrained_model = pretrained_model
 
         self.softmax_classifier = Softmax(max_length * 3, num_labels)
         self.sf = nn.Softmax(dim=1)
-        assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
+        assert pool == 'mean' or pool == 'max' or pool is None, "Pooling method not valid!"
         self.pool = pool
         self.model_type = 'classification'
 
     def forward(self, sentence1, sentence2):
-
-        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[1]
-        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[1]
-        # if self.pool == 'max':
-        #     sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
-        #     sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
-        # elif self.pool == 'mean':
-        #     sentence1_embed = sentence1_embed.mean(2)
-        #     sentence2_embed = sentence2_embed.mean(2)
+        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])
+        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])
+        if self.pool == 'max':
+            sentence1_embed = torch.max(sentence1_embed[0], dim=2)[0]
+            sentence2_embed = torch.max(sentence2_embed[0], dim=2)[0]
+        elif self.pool == 'mean':
+            sentence1_embed = sentence1_embed[0].mean(2)
+            sentence2_embed = sentence2_embed[0].mean(2)
+        elif self.pool is None:
+            sentence1_embed = sentence1_embed[1]
+            sentence2_embed = sentence2_embed[1]
 
         embedding = torch.cat([sentence1_embed, sentence2_embed, torch.abs(sentence1_embed - sentence2_embed)], dim=1)
         output = self.softmax_classifier(embedding)
@@ -327,22 +330,26 @@ class BertClassifier(nn.Module):
 
 
 class BertContrastive(nn.Module):
-    def __init__(self, pretrained_model: nn.Module, pool: str, max_length: int, num_labels: int):
+    def __init__(self, pretrained_model: nn.Module, pool: str):
         super(BertContrastive, self).__init__()
+        pretrained_model.requires_grad = True
         self.pretrained_model = pretrained_model
-        assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
+        assert pool == 'mean' or pool == 'max' or pool is None, "Pooling method not valid!"
         self.pool = pool
         self.model_type = 'regression'
 
     def forward(self, sentence1, sentence2):
-        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
-        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
+        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])
+        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])
         if self.pool == 'max':
-            sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
-            sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
+            sentence1_embed = torch.max(sentence1_embed[0], dim=2)[0]
+            sentence2_embed = torch.max(sentence2_embed[0], dim=2)[0]
         elif self.pool == 'mean':
-            sentence1_embed = sentence1_embed.mean(2)
-            sentence2_embed = sentence2_embed.mean(2)
+            sentence1_embed = sentence1_embed[0].mean(2)
+            sentence2_embed = sentence2_embed[0].mean(2)
+        elif self.pool is None:
+            sentence1_embed = sentence1_embed[1]
+            sentence2_embed = sentence2_embed[1]
         cosine_similarity = cosine_sim(sentence1_embed, sentence2_embed)
         return torch.diagonal(cosine_similarity)
 
@@ -376,18 +383,21 @@ class BaseBert(nn.Module):
     def __init__(self, pretrained_model: nn.Module, pool: str):
         super(BaseBert, self).__init__()
         self.pretrained_model = pretrained_model
-        assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
+        assert pool == 'mean' or pool == 'max' or pool is None, "Pooling method not valid!"
         self.pool = pool
 
     def forward(self, sentence1, sentence2):
-        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
-        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
+        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])
+        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])
         if self.pool == 'max':
-            sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
-            sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
+            sentence1_embed = torch.max(sentence1_embed[0], dim=2)[0]
+            sentence2_embed = torch.max(sentence2_embed[0], dim=2)[0]
         elif self.pool == 'mean':
-            sentence1_embed = sentence1_embed.mean(2)
-            sentence2_embed = sentence2_embed.mean(2)
+            sentence1_embed = sentence1_embed[0].mean(2)
+            sentence2_embed = sentence2_embed[0].mean(2)
+        elif self.pool is None:
+            sentence1_embed = sentence1_embed[1]
+            sentence2_embed = sentence2_embed[1]
 
         embedding = torch.cat([sentence1_embed, sentence2_embed, torch.abs(sentence1_embed - sentence2_embed),
                                sentence1_embed * sentence2_embed], dim=1)
