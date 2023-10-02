@@ -15,7 +15,7 @@ import csv
 import pandas as pd
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer
-from modules.models import Bert,  BertClassifier, BertContrastive
+from modules.models import Bert, BertClassifier, BertContrastive, SupremeBert, EmbedingClassifier
 from modules.utils import load_sts_dataset, tokenize_sentence_pair_dataset, get_dataloader, eval_loop
 from transformers import AutoModel
 from modules.utils import load_nli_dataset, train_loop
@@ -28,9 +28,6 @@ def main():
     MODEL_NAME = 'prajjwal1/bert-tiny'
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-    ## IF YOU CANNOT SOLVE PREVIOUS BUGS, USE THE LINE BELOW:
-    ## bert = AutoModel.from_pretrained(MODEL_NAME)
-
     bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
                    "vocab_size": 30522}
 
@@ -41,8 +38,9 @@ def main():
                    "vocab_size": 30522, "hidden_dropout_prob": 0.1, "layer_norm_eps": 1e-12}
 
     bert = Bert(bert_config).load_model('bert_tiny.bin')
-    bert = bert.eval()
     # bert = AutoModel.from_pretrained(MODEL_NAME)
+    bert = bert.eval()
+
     # EXAMPLE USE
     sentence = 'An example use of pretrained BERT with transformers library to encode a sentence'
     tokenized_sample = tokenizer(sentence, return_tensors='pt', padding='max_length', max_length=512)
@@ -60,7 +58,6 @@ def main2():
     data = pd.read_csv('stsbenchmark.tsv.gz', nrows=5, compression='gzip', delimiter='\t')
     data.head()
 
-
     # INFO: model and tokenizer
     model_name = 'prajjwal1/bert-tiny'
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -68,7 +65,6 @@ def main2():
     # INFO: load bert
     bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
                    "vocab_size": 30522}
-    # bert = Bert(bert_config).load_model('bert_tiny.bin')
 
     # check here
     MODEL_NAME = 'prajjwal1/bert-tiny'
@@ -89,11 +85,10 @@ def main2():
     results_from_pretrained = eval_loop(bert, test_dataloader, device)
 
     print(
-        f'\nPearson correlation: {results_from_pretrained[0]:.2f}\nSpearman correlation: {results_from_pretrained[1]:.2f}')
+        f"\nPearson correlation: {results_from_pretrained[0]:.2f}\nSpearman correlation: {results_from_pretrained[1]:.2f}")
 
 
 def main3():
-
     # INFO: model and training configs
     model_name = 'prajjwal1/bert-tiny'
     num_epochs = 3
@@ -117,17 +112,15 @@ def main3():
 
     ###    Replace None with required input based on yor implementation
 
-    # bert = AutoModel.from_pretrained(model_name)
     # bert = Bert(bert_config).load_model('bert_tiny.bin')
-    # bert.train()
     bert = AutoModel.from_pretrained(model_name)
-    bert_classifier = BertClassifier(bert, pool="max", max_length=128, num_labels=num_labels)
+    bert.train()
+    bert_classifier = BertClassifier(bert, pool="mean", max_length=128, num_labels=num_labels)
 
     # INFO: create optimizer and run training loop
-    optimizer = AdamW(bert_classifier.parameters(), lr=5e-5)
+    optimizer = AdamW([param for param in bert_classifier.parameters() if param.requires_grad == True], lr=5e-5)
     train_loop(bert_classifier, optimizer, train_dataloader, num_epochs, device)
 
-    # TODO: run evaluation loop
     tokenized_test = tokenize_sentence_pair_dataset(nli_dataset['test'], tokenizer, max_length=128)
 
     # INFO: generate train_dataloader
@@ -138,6 +131,7 @@ def main3():
     result_from_classification = eval_loop(bert_classifier, test_dataloader, device)
     print(
         f'\nPearson correlation: {result_from_classification[0]:.2f}\nSpearman correlation: {result_from_classification[1]:.2f}')
+
 
 def main4():
     # INFO: model and training configs
@@ -169,7 +163,7 @@ def main4():
     bert_contrastive = BertContrastive(bert, pool="mean", max_length=128, num_labels=3)
 
     # INFO: create optimizer and run training loop
-    optimizer = AdamW(bert_contrastive.parameters(), lr=5e-5)
+    optimizer = AdamW([param for param in bert_contrastive.parameters() if param.requires_grad == True], lr=5e-5)
     train_loop(bert_contrastive, optimizer, train_dataloader, num_epochs, device)
 
     tokenized_test = tokenize_sentence_pair_dataset(nli_dataset['test'], tokenizer, max_length=128)
@@ -184,8 +178,65 @@ def main4():
         f'\nPearson correlation: {result_from_classification[0]:.2f}\nSpearman correlation: {result_from_classification[1]:.2f}')
 
 
+def main5():
+    model_name = 'prajjwal1/bert-tiny'
+    num_epochs = 3
+    train_batch_size = 8
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
+                   "vocab_size": 30522}
+    bert_path = 'bert_tiny.bin'
+
+    # WARNING: Change this code if you implemented a different nli loader for this part
+    nli_dataset = load_nli_dataset('AllNLI.tsv.gz')
+
+    # INFO: tokenize dataset
+    # WARNING: Use only first 50000 samples and maximum sequence lenght of 128
+    tokenized_train = tokenize_sentence_pair_dataset(nli_dataset['train'][:50000], tokenizer, max_length=128)
+
+    # INFO: generate train_dataloader
+    train_dataloader = get_dataloader(tokenized_train, batch_size=train_batch_size)
+
+    tokenized_test = tokenize_sentence_pair_dataset(nli_dataset['test'], tokenizer, max_length=128)
+
+    # INFO: generate train_dataloader
+    test_dataloader = get_dataloader(tokenized_test, batch_size=8, shuffle=True)
+
+
+    bert = AutoModel.from_pretrained(model_name)
+    # bert = Bert(bert_config).load_model('bert_tiny.bin')
+    # bert.train()
+
+    # supreme_bert = BertClassifier(bert, pool="mean", max_length=128, num_labels=3) #SupremeBert(bert, pool="mean")
+    supreme_bert = SupremeBert(bert, pool="mean")
+    embedding_NLI = EmbedingClassifier(input_channel=512, hidden_channel=100, output_channel=3)
+    supreme_bert.set_head(embedding_NLI)
+    # embedding_STS =
+
+    # supreme_bert.set_head(embedding_NLI)
+
+    # INFO: create optimizer and run training loop
+    supreme_bert.turn_off_base()
+    optimizer = AdamW(supreme_bert.parameters(), lr=5e-5)
+    train_loop(supreme_bert, optimizer, train_dataloader, num_epochs, device)
+
+    result_from_classification = eval_loop(supreme_bert, test_dataloader, device)
+    print(
+        f'\nPearson correlation: {result_from_classification[0]:.2f}\nSpearman correlation: {result_from_classification[1]:.2f}')
+
+    supreme_bert.turn_on_base()
+    optimizer = AdamW(supreme_bert.parameters(), lr=5e-5)
+    train_loop(supreme_bert, optimizer, train_dataloader, num_epochs, device)
+
+    result_from_classification = eval_loop(supreme_bert, test_dataloader, device)
+    print(
+        f'\nPearson correlation: {result_from_classification[0]:.2f}\nSpearman correlation: {result_from_classification[1]:.2f}')
+
+
 if __name__ == "__main__":
     # main()
     # main2()
-    # main3()
+    main3()
     main4()
+    main5()

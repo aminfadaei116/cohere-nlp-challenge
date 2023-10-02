@@ -1,10 +1,11 @@
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 
 class STSDataSet(DataLoader):
 
     def __init__(self, score, sentence1, sentence2):
-        assert len(score) == len(sentence1.data['input_ids']) and len(score) == len(sentence2.data['input_ids']), "Sentences don't have the same size."
+        assert len(score) == len(sentence1.data['input_ids']) and len(score) == len(sentence2.data['input_ids']), \
+            "Sentences don't have the same size."
         self.score = score
         self.sentence1_id = sentence1.data['input_ids']
         self.sentence2_id = sentence2.data['input_ids']
@@ -15,13 +16,15 @@ class STSDataSet(DataLoader):
         return len(self.score)
 
     def __getitem__(self, item):
-        return self.score[item], (self.sentence1_id[item], self.sentence1_mask[item]), (self.sentence2_id[item], self.sentence2_mask[item])
+        return self.score[item], (self.sentence1_id[item], self.sentence1_mask[item]), (self.sentence2_id[item],
+                                                                                        self.sentence2_mask[item])
 
 
 class NLIDataSet(DataLoader):
 
     def __init__(self, score, sentence1, sentence2):
-        assert len(score) == len(sentence1.data['input_ids']) and len(score) == len(sentence2.data['input_ids']), "Sentences don't have the same size."
+        assert len(score) == len(sentence1.data['input_ids']) and len(score) == len(sentence2.data['input_ids']), \
+            "Sentences don't have the same size."
         classes = {'contradiction': 0, 'neutral': 1, 'entailment': 2}
         score = [classes.get(key) for key in score]
 
@@ -35,4 +38,5 @@ class NLIDataSet(DataLoader):
         return len(self.score)
 
     def __getitem__(self, item):
-        return self.score[item], (self.sentence1_id[item], self.sentence1_mask[item]), (self.sentence2_id[item], self.sentence2_mask[item])
+        return self.score[item], (self.sentence1_id[item], self.sentence1_mask[item]), (self.sentence2_id[item],
+                                                                                        self.sentence2_mask[item])

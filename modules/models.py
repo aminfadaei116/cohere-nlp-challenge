@@ -1,43 +1,35 @@
-import json
 import math
 from collections import OrderedDict
 import torch
-from torch import nn, Tensor
+from torch import nn
 from modules.utils import cosine_sim
-from typing import Union, Tuple, List, Iterable, Dict
-import torch.nn.functional as F
-from torch.nn.parameter import Parameter
-from torch.optim import AdamW
-from torch.utils.data import DataLoader
-from scipy.stats import pearsonr, spearmanr
-import numpy as np
-import gzip
-import csv
-import pandas as pd
-from tqdm.auto import tqdm
 
 
-def gelu(x):
+def gelu(x: torch.Tensor) -> torch.Tensor:
     """
     The Gelu activation function.
-    :param x:
-    :return:
+    :param x: torch.Tensor
+        The input of the activation function
+    :return: torch.Tensor
+        The output of the Gelu activation function
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 class Config(object):
+    """
+    A Configuration model containing all the configuration hyper-parameters
+    """
     def __init__(self,
-                vocab_size,
-                hidden_size=768,
-                num_hidden_layers=12,
-                num_attention_heads=12,
-                intermediate_size=3072,
-                dropout_prob=0.9,
-                max_position_embeddings=512,
-                type_vocab_size=2,
-                initializer_range=0.02):
-
+                 vocab_size,
+                 hidden_size=768,
+                 num_hidden_layers=12,
+                 num_attention_heads=12,
+                 intermediate_size=3072,
+                 dropout_prob=0.9,
+                 max_position_embeddings=512,
+                 type_vocab_size=2,
+                 initializer_range=0.02):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -67,18 +59,26 @@ class LayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        This function needs some editing
-        :param x: torch.Tensor
-            The input parameter
-        :return normalized: torch.Tensor
-            The normalized tensor in the LayerNorm
-        """
-        """
-        Bug #1,2,3
-        Code Edit
-        u = x.mean(0, keepdim=True)
-        s = (x + u).pow(2).mean(0, keepdim=True)
-        x = (x + u) / torch.sqrt(s + self.variance_epsilon)
+        Bug #1,2,3:
+        The implementation of Layer Norm had some bugs.
+        Visit: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
+        For more references.
+
+        Bug #1: Need to calculate the mean of the input tensor based on the last dimension, not on the first dimension
+        in which represents the batch. Initially is calculated the average over the batch which was incorrect.
+
+        Bug #2: For calculating the variance, the mean should be subtracted from the data not added with the data,
+        additionally, we want to calculate the average over the last dimension, not the first dimension in which
+        represents the batch.
+
+        Bug #3: For calculating the final normalized output we will still need to subtract the mean from the data not
+        the other way around (adding mean and data).
+
+        Code Edit:
+        >>
+        u = x.mean(0, keepdim=True) -> mean = x.mean(dim=-1, keepdim=True)
+        s = (x + u).pow(2).mean(0, keepdim=True) -> var = ((x - mean).pow(2)).mean(dim=-1, keepdim=True)
+        x = (x + u) / torch.sqrt(s + self.variance_epsilon) ->
         return self.gamma * x + self.beta
         """
         mean = x.mean(dim=-1, keepdim=True)  # Edited line #1
@@ -88,12 +88,9 @@ class LayerNorm(nn.Module):
         return self.gamma * y + self.beta
 
 
-
-
 class MLP(nn.Module):
 
     def __init__(self, hidden_size, intermediate_size):
-
         super(MLP, self).__init__()
         self.dense_expansion = nn.Linear(hidden_size, intermediate_size)
         self.dense_contraction = nn.Linear(intermediate_size, hidden_size)
@@ -119,8 +116,12 @@ class Layer(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         """
-        Bug #4
-        Replace
+        Bug #4 
+        This bug couldn't be spot easily since the self.all_head_size and config.hidden_size were holding the same 
+        value, but it you play with the hyper parameters of this model e.g., hidden_size and assign a odd number, you
+        would be receiving errors.
+        
+        Code Edit:
         >>
         self.attn_out = nn.Linear(config.hidden_size, config.hidden_size) -> 
         self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)
@@ -128,7 +129,6 @@ class Layer(nn.Module):
         self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)  # Edited line #4
         self.ln1 = LayerNorm(config.hidden_size)
 
-        # BertSelfOut ends here
         self.mlp = MLP(config.hidden_size, config.intermediate_size)
         self.ln2 = LayerNorm(config.hidden_size)
 
@@ -147,7 +147,10 @@ class Layer(nn.Module):
         mask = mask.unsqueeze(1).unsqueeze(2)
 
         """
-        Bug #5
+        Bug #5: The dimensions of the query and key must be re-arranged in a way that we are capable of multiplying them
+        in each other. That is way we needed to transpose the key in a proper format.
+        
+        Code Edit:
         >>
         s = torch.matmul(q, k) -> s = torch.matmul(q, k.transpose(-1, -2))
         """
@@ -156,7 +159,12 @@ class Layer(nn.Module):
         s = s / math.sqrt(self.attention_head_size)
 
         """
-        Bug #6
+        Bug #6: Need to mask out the segments of the input in which don't have valid tokens (words), and since the 
+        model is going through a softmax function, it would be valid to replace the scores which didn't have a valid 
+        word into 0. Since the score goes though a softmax function we should replace the value with -inf. Initially
+        the replacement was with +int, which was wrong.
+        
+        Code Edit:
         >>
         s = torch.where(mask, s, torch.tensor(float('inf'))) -> 
         s = torch.where(mask, s, torch.tensor(float('-inf')))
@@ -165,6 +173,11 @@ class Layer(nn.Module):
 
         """
         Bug #7
+        In the original implementation of the model, if was required to apply softmax for the score vector, you can
+        refer to the transformer paper "Attention is all you need". But initially it was just a 'p=s', which is 
+        incorrect, and must be replaced with a softmax function.
+        
+        Code edit:
         >>
         p = s -> 
         p = nn.functional.softmax(s, dim=-1)
@@ -186,11 +199,14 @@ class Layer(nn.Module):
         a = self.merge_heads(a, self.num_attention_heads, self.attention_head_size)
         a = self.attn_out(a)
         a = self.dropout(a)
-        a = self.ln1(a)
+        """
+        change here
+        """
+        a = self.ln1(a + x)
 
         m = self.mlp(a)
         m = self.dropout(m)
-        m = self.ln2(m)
+        m = self.ln2(m + a)
 
         return m
 
@@ -198,16 +214,11 @@ class Layer(nn.Module):
 class Bert(nn.Module):
     def __init__(self, config_dict):
         super(Bert, self).__init__()
-        """
-        Replaced 
-        # padding_idx=0 -> padding_idx=self.config.pad_token_id
-        """
         self.config = Config.from_dict(config_dict)
-
         self.embeddings = nn.ModuleDict({
-          'token': nn.Embedding(self.config.vocab_size, self.config.hidden_size, padding_idx=0),
-          'position': nn.Embedding(self.config.max_position_embeddings, self.config.hidden_size),
-          'token_type': nn.Embedding(self.config.type_vocab_size, self.config.hidden_size),
+            'token': nn.Embedding(self.config.vocab_size, self.config.hidden_size, padding_idx=0),
+            'position': nn.Embedding(self.config.max_position_embeddings, self.config.hidden_size),
+            'token_type': nn.Embedding(self.config.type_vocab_size, self.config.hidden_size),
         })
 
         self.ln = LayerNorm(self.config.hidden_size)
@@ -227,23 +238,23 @@ class Bert(nn.Module):
         position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
-
         """
-        Replaced 
+        Bug #8
+        In the original bert model the work embedding, position embeding and the token type embedding must be summed up
+        all together. Initially it these embedding were concatinated which resulted an error due to incopatibility of 
+        the dimensions in the next layers.
+        
+        Code edit:
         >>>
         x = torch.cat((self.embeddings.token(input_ids),
                        self.embeddings.position(position_ids),
                        self.embeddings.token_type(token_type_ids)),
-                      dim=-1)
-        >>>
-        x = self.embeddings.token(input_ids) + self.embeddings.position(position_ids) + self.embeddings.token_type(token_type_ids)
+                      dim=-1) ->
+        x = self.embeddings.token(input_ids) + self.embeddings.position(position_ids) + self.embeddings.token_type(
+            token_type_ids)
         """
-        x = self.embeddings.token(input_ids) + self.embeddings.position(position_ids) + self.embeddings.token_type(token_type_ids)
-
-        # x = torch.cat((self.embeddings.token(input_ids),
-        #                self.embeddings.position(position_ids),
-        #                self.embeddings.token_type(token_type_ids)),
-        #               dim=-1)
+        x = self.embeddings.token(input_ids) + self.embeddings.position(position_ids) + self.embeddings.token_type(
+            token_type_ids)  # Edited line #8
 
         x = self.dropout(self.ln(x))
 
@@ -251,7 +262,7 @@ class Bert(nn.Module):
             x = layer(x, attention_mask)
 
         o = self.pooler(x[:, 0])
-        return (x, o)
+        return x, o
 
     def load_model(self, path):
         self.load_state_dict(torch.load(path))
@@ -259,13 +270,18 @@ class Bert(nn.Module):
 
 
 class Softmax(torch.nn.Module):
-    def __init__(self, n_inputs, n_outputs):
+    def __init__(self, input_channel, output_channel):
         super(Softmax, self).__init__()
-        self.linear = torch.nn.Linear(n_inputs, n_outputs)
+        self.layers = nn.Sequential(
+                  torch.nn.Linear(input_channel, int(input_channel/2)),
+                  nn.ReLU(),
+                  torch.nn.Linear(int(input_channel/2), output_channel),
+                )
 
     def forward(self, x):
-        output = self.linear(x)
+        output = self.layers(x)
         return output
+
 
 class BertClassifier(nn.Module):
     def __init__(self, pretrained_model: nn.Module, pool: str, max_length: int, num_labels: int):
@@ -281,18 +297,18 @@ class BertClassifier(nn.Module):
 
     def forward(self, sentence1, sentence2):
 
-        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
-        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[0]
-        if self.pool == 'max':
-            sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
-            sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
-        elif self.pool == 'mean':
-            sentence1_embed = sentence1_embed.mean(2)
-            sentence2_embed = sentence2_embed.mean(2)
+        sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[1]
+        sentence2_embed = self.pretrained_model(input_ids=sentence2[0], attention_mask=sentence2[1])[1]
+        # if self.pool == 'max':
+        #     sentence1_embed = torch.max(sentence1_embed, dim=2)[0]
+        #     sentence2_embed = torch.max(sentence2_embed, dim=2)[0]
+        # elif self.pool == 'mean':
+        #     sentence1_embed = sentence1_embed.mean(2)
+        #     sentence2_embed = sentence2_embed.mean(2)
 
         embedding = torch.cat([sentence1_embed, sentence2_embed, torch.abs(sentence1_embed - sentence2_embed)], dim=1)
         output = self.softmax_classifier(embedding)
-        output = self.sf(output)
+        # output = self.sf(output)
         return output
 
 
@@ -303,7 +319,6 @@ class BertContrastive(nn.Module):
         assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
         self.pool = pool
         self.model_type = 'regression'
-
 
     def forward(self, sentence1, sentence2):
         sentence1_embed = self.pretrained_model(input_ids=sentence1[0], attention_mask=sentence1[1])[0]
@@ -320,7 +335,32 @@ class BertContrastive(nn.Module):
 
 class SupremeBert(nn.Module):
     def __init__(self, pretrained_model: nn.Module, pool: str):
-        super(SupremeBert).__init__()
+        super(SupremeBert, self).__init__()
+        self.base_bert = BaseBert(pretrained_model, pool)
+        self.embedding_classifier = None
+        self.model_type = 'classification'
+        self.base_bert.requires_grad = True
+
+    def forward(self, sentence1, sentence2):
+        embedding = self.base_bert(sentence1, sentence2)
+        return self.embedding_classifier(embedding)
+
+    def set_head(self, embed_classifier):
+        self.embedding_classifier = embed_classifier
+
+    def get_head(self):
+        return self.embedding_classifier
+
+    def turn_on_base(self):
+        self.base_bert.requires_grad = True
+
+    def turn_off_base(self):
+        self.base_bert.requires_grad = False
+
+
+class BaseBert(nn.Module):
+    def __init__(self, pretrained_model: nn.Module, pool: str):
+        super(BaseBert, self).__init__()
         self.pretrained_model = pretrained_model
         assert pool == 'mean' or pool == 'max', "Pooling method not valid!"
         self.pool = pool
@@ -335,14 +375,38 @@ class SupremeBert(nn.Module):
             sentence1_embed = sentence1_embed.mean(2)
             sentence2_embed = sentence2_embed.mean(2)
 
-        embedding = torch.cat([sentence1_embed, sentence2_embed, torch.abs(sentence1_embed - sentence2_embed)], dim=1)
+        embedding = torch.cat([sentence1_embed, sentence2_embed, torch.abs(sentence1_embed - sentence2_embed),
+                               sentence1_embed * sentence2_embed], dim=1)
         return embedding
 
 
 class EmbedingClassifier(nn.Module):
-    def __init__(self, input_channel: int, output_channel: int):
-        super(EmbedingClassifier).__init__()
-        pass
+    def __init__(self, input_channel: int, hidden_channel: int, output_channel: int):
+        super(EmbedingClassifier, self).__init__()
+        # self.layers = Softmax(input_channel, output_channel)
+        self.layers = nn.Sequential(
+            torch.nn.Linear(input_channel, hidden_channel),
+            nn.ReLU(),
+            nn.Linear(hidden_channel, hidden_channel),
+            nn.ReLU(),
+            torch.nn.Linear(hidden_channel, output_channel),
+        )
+        self.sf = nn.Softmax(dim=1)
+        # self.l_init = nn.Linear(input_channel, hidden_channel)
+        # self.num_layer = num_layer
+        # self.layers = nn.ModuleList([
+        #     (nn.Linear(hidden_channel, output_channel), nn.ReLU()) for _ in range(self.num_layer)
+        # ])
+        # self.l_end = nn.Linear(hidden_channel, output_channel)
+        # self.sf = nn.Softmax(dim=1)
+        # self.layers = nn.Sequential(
+        #     nn.Linear(input_channel, hidden_channel),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_channel, output_channel),
+        #     nn.Softmax(dim=1)
+        # )
 
     def forward(self, embedding):
-        pass
+        x = self.layers(embedding)
+        # score = self.sf(x)
+        return x
