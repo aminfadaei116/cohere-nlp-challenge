@@ -59,19 +59,19 @@ class LayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Bug #1,2,3:
+        Bug #1:
         The implementation of Layer Norm had some bugs.
         Visit: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
         For more references.
 
-        Bug #1: Need to calculate the mean of the input tensor based on the last dimension, not on the first dimension
+        Bug #1.1: Need to calculate the mean of the input tensor based on the last dimension, not on the first dimension
         in which represents the batch. Initially is calculated the average over the batch which was incorrect.
 
-        Bug #2: For calculating the variance, the mean should be subtracted from the data not added with the data,
+        Bug #1.2: For calculating the variance, the mean should be subtracted from the data not added with the data,
         additionally, we want to calculate the average over the last dimension, not the first dimension in which
         represents the batch.
 
-        Bug #3: For calculating the final normalized output we will still need to subtract the mean from the data not
+        Bug #1.3: For calculating the final normalized output we will still need to subtract the mean from the data not
         the other way around (adding mean and data).
 
         Code Edit:
@@ -81,9 +81,9 @@ class LayerNorm(nn.Module):
         x = (x + u) / torch.sqrt(s + self.variance_epsilon) ->
         return self.gamma * x + self.beta
         """
-        mean = x.mean(dim=-1, keepdim=True)  # Edited line #1
-        var = ((x - mean).pow(2)).mean(dim=-1, keepdim=True)  # Edited line #2
-        std = (var + self.variance_epsilon).sqrt()  # Edited line #3
+        mean = x.mean(dim=-1, keepdim=True)  # Edited line #1.1
+        var = ((x - mean).pow(2)).mean(dim=-1, keepdim=True)  # Edited line #1.2
+        std = (var + self.variance_epsilon).sqrt()  # Edited line #1.3
         y = (x - mean) / std
         return self.gamma * y + self.beta
 
@@ -116,7 +116,7 @@ class Layer(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         """
-        Bug #4 
+        Bug #2
         This bug couldn't be spot easily since the self.all_head_size and config.hidden_size were holding the same 
         value, but it you play with the hyper parameters of this model e.g., hidden_size and assign a odd number, you
         would be receiving errors.
@@ -126,7 +126,7 @@ class Layer(nn.Module):
         self.attn_out = nn.Linear(config.hidden_size, config.hidden_size) -> 
         self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)
         """
-        self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)  # Edited line #4
+        self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)  # Edited line #2
         self.ln1 = LayerNorm(config.hidden_size)
 
         self.mlp = MLP(config.hidden_size, config.intermediate_size)
@@ -147,19 +147,19 @@ class Layer(nn.Module):
         mask = mask.unsqueeze(1).unsqueeze(2)
 
         """
-        Bug #5: The dimensions of the query and key must be re-arranged in a way that we are capable of multiplying them
+        Bug #3: The dimensions of the query and key must be re-arranged in a way that we are capable of multiplying them
         in each other. That is way we needed to transpose the key in a proper format.
         
         Code Edit:
         >>
         s = torch.matmul(q, k) -> s = torch.matmul(q, k.transpose(-1, -2))
         """
-        s = torch.matmul(q, k.transpose(-1, -2))  # Edited line #5
+        s = torch.matmul(q, k.transpose(-1, -2))  # Edited line #3
 
         s = s / math.sqrt(self.attention_head_size)
 
         """
-        Bug #6: Need to mask out the segments of the input in which don't have valid tokens (words), and since the 
+        Bug #4: Need to mask out the segments of the input in which don't have valid tokens (words), and since the 
         model is going through a softmax function, it would be valid to replace the scores which didn't have a valid 
         word into 0. Since the score goes though a softmax function we should replace the value with -inf. Initially
         the replacement was with +int, which was wrong.
@@ -169,10 +169,10 @@ class Layer(nn.Module):
         s = torch.where(mask, s, torch.tensor(float('inf'))) -> 
         s = torch.where(mask, s, torch.tensor(float('-inf')))
         """
-        s = torch.where(mask, s, torch.tensor(float('-inf')))  # Edited line #6
+        s = torch.where(mask, s, torch.tensor(float('-inf')))  # Edited line #4
 
         """
-        Bug #7
+        Bug #5
         In the original implementation of the model, if was required to apply softmax for the score vector, you can
         refer to the transformer paper "Attention is all you need". But initially it was just a 'p=s', which is 
         incorrect, and must be replaced with a softmax function.
@@ -182,7 +182,7 @@ class Layer(nn.Module):
         p = s -> 
         p = nn.functional.softmax(s, dim=-1)
         """
-        p = nn.functional.softmax(s, dim=-1)  # Edited line #7
+        p = nn.functional.softmax(s, dim=-1)  # Edited line #5
         p = self.dropout(p)
 
         a = torch.matmul(p, v)
@@ -200,13 +200,27 @@ class Layer(nn.Module):
         a = self.attn_out(a)
         a = self.dropout(a)
         """
-        change here
+        Bug #6.1: In the official Bert implementation the input of the LayerNorm should be the hidden state summed with
+        the input of the attention model.
+        Code Edit:
+        >>
+        a = self.ln1(a) -> a = self.ln1(a + x)
+        >>
         """
-        a = self.ln1(a + x)
+
+        """
+        Bug #6.2: Similar to 6.1 the input of the second LayerNorm should also be the sum of the hidden state and the 
+        output of the previous LayerNorm.
+        Code Edit:
+        >>
+        m = self.ln2(m)  -> m = self.ln2(m + a) 
+        >>
+        """
+        a = self.ln1(a + x)  # Edited line #6.1
 
         m = self.mlp(a)
         m = self.dropout(m)
-        m = self.ln2(m + a)
+        m = self.ln2(m + a)  # Edited line #6.2
 
         return m
 
@@ -239,7 +253,7 @@ class Bert(nn.Module):
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
         """
-        Bug #8
+        Bug #7
         In the original bert model the work embedding, position embeding and the token type embedding must be summed up
         all together. Initially it these embedding were concatinated which resulted an error due to incopatibility of 
         the dimensions in the next layers.
@@ -254,7 +268,7 @@ class Bert(nn.Module):
             token_type_ids)
         """
         x = self.embeddings.token(input_ids) + self.embeddings.position(position_ids) + self.embeddings.token_type(
-            token_type_ids)  # Edited line #8
+            token_type_ids)  # Edited line #7
 
         x = self.dropout(self.ln(x))
 

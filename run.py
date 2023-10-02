@@ -24,22 +24,13 @@ torch.manual_seed(0)
 np.random.seed(0)
 
 
-def main():
+def part_1():
     MODEL_NAME = 'prajjwal1/bert-tiny'
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
     bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
                    "vocab_size": 30522}
-
-    """
-    new config
-    """
-    bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
-                   "vocab_size": 30522, "hidden_dropout_prob": 0.1, "layer_norm_eps": 1e-12}
-
     bert = Bert(bert_config).load_model('bert_tiny.bin')
-    # bert = AutoModel.from_pretrained(MODEL_NAME)
-    bert = bert.eval()
 
     # EXAMPLE USE
     sentence = 'An example use of pretrained BERT with transformers library to encode a sentence'
@@ -52,12 +43,37 @@ def main():
     # further processing through the layers used for the auxiliary pretraining task.
     embedding = output[1]
     print(f'\nResulting embedding shape: {embedding.shape}')
+    #
+    # MODEL_NAME = 'prajjwal1/bert-tiny'
+    # tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    #
+    # bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
+    #                "vocab_size": 30522}
+    #
+    # """
+    # new config
+    # """
+    # bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
+    #                "vocab_size": 30522, "hidden_dropout_prob": 0.1, "layer_norm_eps": 1e-12}
+    #
+    # bert = Bert(bert_config).load_model('bert_tiny.bin')
+    # # bert = AutoModel.from_pretrained(MODEL_NAME)
+    # bert = bert.eval()
+    #
+    # # EXAMPLE USE
+    # sentence = 'An example use of pretrained BERT with transformers library to encode a sentence'
+    # tokenized_sample = tokenizer(sentence, return_tensors='pt', padding='max_length', max_length=512)
+    # output = bert(input_ids=tokenized_sample['input_ids'],
+    #               attention_mask=tokenized_sample['attention_mask'], )
+    #
+    # # We use "pooler_output" for simplicity. This corresponds the last layer
+    # # hidden-state of the first token of the sequence (CLS token) after
+    # # further processing through the layers used for the auxiliary pretraining task.
+    # embedding = output[1]
+    # print(f'\nResulting embedding shape: {embedding.shape}')
 
 
-def main2():
-    data = pd.read_csv('stsbenchmark.tsv.gz', nrows=5, compression='gzip', delimiter='\t')
-    data.head()
-
+def part_2():
     # INFO: model and tokenizer
     model_name = 'prajjwal1/bert-tiny'
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -65,11 +81,8 @@ def main2():
     # INFO: load bert
     bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
                    "vocab_size": 30522}
-
-    # check here
-    MODEL_NAME = 'prajjwal1/bert-tiny'
-    # bert = AutoModel.from_pretrained(MODEL_NAME)
     bert = Bert(bert_config).load_model('bert_tiny.bin')
+
     # INFO: load dataset
     sts_dataset = load_sts_dataset('stsbenchmark.tsv.gz')
 
@@ -77,18 +90,17 @@ def main2():
     tokenized_test = tokenize_sentence_pair_dataset(sts_dataset['test'], tokenizer)
 
     # INFO: generate dataloader
-    test_dataloader = get_dataloader(tokenized_test, batch_size=5)
+    test_dataloader = get_dataloader(tokenized_test, batch_size=1)
 
     # INFO: run evaluation loop
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
     results_from_pretrained = eval_loop(bert, test_dataloader, device)
 
     print(
-        f"\nPearson correlation: {results_from_pretrained[0]:.2f}\nSpearman correlation: {results_from_pretrained[1]:.2f}")
+        f'\nPearson correlation: {results_from_pretrained[0]:.2f}\nSpearman correlation: {results_from_pretrained[1]:.2f}')
 
 
-def main3():
+def part_3():
     # INFO: model and training configs
     model_name = 'prajjwal1/bert-tiny'
     num_epochs = 3
@@ -98,22 +110,18 @@ def main3():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
                    "vocab_size": 30522}
-    bert_path = 'bert_tiny.bin'
 
     # INFO: load nli dataset
     nli_dataset = load_nli_dataset('AllNLI.tsv.gz')
 
     # INFO: tokenize dataset
-    # WARNING: Use only first 50000 samples and maximum sequence length of 128
     tokenized_train = tokenize_sentence_pair_dataset(nli_dataset['train'][:50000], tokenizer, max_length=128)
 
     # INFO: generate train_dataloader
     train_dataloader = get_dataloader(tokenized_train, batch_size=batch_size, shuffle=True)
 
-    ###    Replace None with required input based on yor implementation
-
-    # bert = Bert(bert_config).load_model('bert_tiny.bin')
-    bert = AutoModel.from_pretrained(model_name)
+    # Load the Bert Model that you previously designed
+    bert = Bert(bert_config).load_model('bert_tiny.bin')
     bert.train()
     bert_classifier = BertClassifier(bert, pool="mean", max_length=128, num_labels=num_labels)
 
@@ -133,14 +141,13 @@ def main3():
         f'\nPearson correlation: {result_from_classification[0]:.2f}\nSpearman correlation: {result_from_classification[1]:.2f}')
 
 
-def main4():
+def part_4():
     # INFO: model and training configs
     model_name = 'prajjwal1/bert-tiny'
     num_epochs = 3
     train_batch_size = 8
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    ## drop_out = 0.1
     bert_config = {"hidden_size": 128, "num_attention_heads": 2, "num_hidden_layers": 2, "intermediate_size": 512,
                    "vocab_size": 30522}
     bert_path = 'bert_tiny.bin'
@@ -155,11 +162,9 @@ def main4():
     # INFO: generate train_dataloader
     train_dataloader = get_dataloader(tokenized_train, batch_size=train_batch_size)
 
-    bert = AutoModel.from_pretrained(model_name)
-    # bert = Bert(bert_config).load_model('bert_tiny.bin')
-    # bert.train()
-
-    ###    Replace None with required input based on yor implementation
+    # Load the Bert Model that you previously designed
+    bert = Bert(bert_config).load_model('bert_tiny.bin')
+    bert.train()
     bert_contrastive = BertContrastive(bert, pool="mean", max_length=128, num_labels=3)
 
     # INFO: create optimizer and run training loop
@@ -172,13 +177,12 @@ def main4():
     test_dataloader = get_dataloader(tokenized_test, batch_size=8, shuffle=True)
 
     # INFO: generate dataloader
-    # test_dataloader = get_dataloader(tokenized_test, batch_size=5)
     result_from_classification = eval_loop(bert_contrastive, test_dataloader, device)
     print(
         f'\nPearson correlation: {result_from_classification[0]:.2f}\nSpearman correlation: {result_from_classification[1]:.2f}')
 
 
-def main5():
+def part_5():
     model_name = 'prajjwal1/bert-tiny'
     num_epochs = 3
     train_batch_size = 8
@@ -203,10 +207,8 @@ def main5():
     # INFO: generate train_dataloader
     test_dataloader = get_dataloader(tokenized_test, batch_size=8, shuffle=True)
 
-
-    bert = AutoModel.from_pretrained(model_name)
-    # bert = Bert(bert_config).load_model('bert_tiny.bin')
-    # bert.train()
+    bert = Bert(bert_config).load_model('bert_tiny.bin')
+    bert.train()
 
     # supreme_bert = BertClassifier(bert, pool="mean", max_length=128, num_labels=3) #SupremeBert(bert, pool="mean")
     supreme_bert = SupremeBert(bert, pool="mean")
@@ -235,8 +237,8 @@ def main5():
 
 
 if __name__ == "__main__":
-    # main()
-    # main2()
-    main3()
-    main4()
-    main5()
+    part_1()
+    part_2()
+    part_3()
+    part_4()
+    part_5()
