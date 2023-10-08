@@ -301,8 +301,9 @@ class Softmax(torch.nn.Module):
 class BertClassifier(nn.Module):
     def __init__(self, pretrained_model: nn.Module, max_length: int, num_labels: int, pool: str = None):
         super(BertClassifier, self).__init__()
-        pretrained_model.requires_grad = True
-        self.pretrained_model = pretrained_model
+
+        self.pretrained_model = pretrained_model.eval()
+        self.pretrained_model.requires_grad = True
 
         self.softmax_classifier = Softmax(max_length * 3, num_labels)
         self.sf = nn.Softmax(dim=1)
@@ -325,15 +326,15 @@ class BertClassifier(nn.Module):
 
         embedding = torch.cat([sentence1_embed, sentence2_embed, torch.abs(sentence1_embed - sentence2_embed)], dim=1)
         output = self.softmax_classifier(embedding)
-        # output = self.sf(output)
+        # output = self.sf(output)  # Could also be used.
         return output
 
 
 class BertContrastive(nn.Module):
     def __init__(self, pretrained_model: nn.Module, pool: str = None):
         super(BertContrastive, self).__init__()
-        pretrained_model.requires_grad = True
-        self.pretrained_model = pretrained_model
+        self.pretrained_model = pretrained_model.eval()
+        self.pretrained_model.requires_grad = True
         assert pool == 'mean' or pool == 'max' or pool is None, "Pooling method not valid!"
         self.pool = pool
         self.model_type = 'regression'
@@ -355,8 +356,9 @@ class BertContrastive(nn.Module):
 
 
 class SupremeBert(nn.Module):
-    def __init__(self, pretrained_model: nn.Module, pool: str):
+    def __init__(self, pretrained_model: nn.Module, pool: str = None):
         super(SupremeBert, self).__init__()
+        pretrained_model = pretrained_model.eval()
         self.base_bert = BaseBert(pretrained_model, pool)
         self.embedding_classifier = None
         self.model_type = 'classification'
@@ -380,7 +382,7 @@ class SupremeBert(nn.Module):
 
 
 class BaseBert(nn.Module):
-    def __init__(self, pretrained_model: nn.Module, pool: str):
+    def __init__(self, pretrained_model: nn.Module, pool: str = None):
         super(BaseBert, self).__init__()
         self.pretrained_model = pretrained_model
         assert pool == 'mean' or pool == 'max' or pool is None, "Pooling method not valid!"
@@ -416,19 +418,6 @@ class EmbedingClassifier(nn.Module):
             torch.nn.Linear(hidden_channel, output_channel),
         )
         self.sf = nn.Softmax(dim=1)
-        # self.l_init = nn.Linear(input_channel, hidden_channel)
-        # self.num_layer = num_layer
-        # self.layers = nn.ModuleList([
-        #     (nn.Linear(hidden_channel, output_channel), nn.ReLU()) for _ in range(self.num_layer)
-        # ])
-        # self.l_end = nn.Linear(hidden_channel, output_channel)
-        # self.sf = nn.Softmax(dim=1)
-        # self.layers = nn.Sequential(
-        #     nn.Linear(input_channel, hidden_channel),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_channel, output_channel),
-        #     nn.Softmax(dim=1)
-        # )
 
     def forward(self, embedding):
         x = self.layers(embedding)

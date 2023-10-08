@@ -118,9 +118,6 @@ def eval_loop(model: nn.Module, eval_dataloader: DataLoader, device: str) -> Lis
             sentence1_embed = model(input_ids=sentence1[0].to(device), attention_mask=sentence1[1].to(device))[1].cpu()
             sentence2_embed = model(input_ids=sentence2[0].to(device), attention_mask=sentence2[1].to(device))[1].cpu()
 
-            # sentence1_embed = torch.mean(model(input_ids=sentence1[0].to(device), attention_mask=sentence1[1].to(device))[0], dim=2).cpu()
-            # sentence2_embed = torch.mean(model(input_ids=sentence2[0].to(device), attention_mask=sentence2[1].to(device))[0], dim=2).cpu()
-
             cosine_similarity = cosine_sim(sentence1_embed, sentence2_embed)
             predict_score.append(torch.diagonal(cosine_similarity).detach())
             ground_score.append(score.detach())
@@ -179,8 +176,8 @@ def train_loop(model: nn.Module, optimizer, train_dataloader: DataLoader, num_ep
             label = label.to(device)
             if model.model_type == 'regression':
                 label = label.float() - 1.0
-            sentence1 = convert_list(sentence1, device)  # [sentence1[0].to(device), sentence1[1].to(device)]
-            sentence2 = convert_list(sentence2, device)  # [sentence2[0].to(device), sentence2[1].to(device)]
+            sentence1 = convert_list(sentence1, device)
+            sentence2 = convert_list(sentence2, device)
 
             output = model(sentence1, sentence2)
 
