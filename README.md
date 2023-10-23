@@ -47,7 +47,8 @@ python part_2.py
 
 Conneue et al. (2018) showed that a good sentence embedding model can be learned using NLI dataset. This method proposes using a shared encoder to encode both premise and hypothesis and then combine them before using a softmax classifier. Here , we will use a pretrained BERT model as shared encoder.
 
-# [Alt text]("/images/metrics.png")
+<img title="NLI model" alt="NLI model" src="/images/model.png">
+
 Tasks:
 - [2 Point] Prepare a training dataloader and training loop: Read in NLI data, tokenize and generate the corresponding data loader
 - [2 Point] BertClassifier: Construct a model that uses above method. Please follow the architecture illustrated in the given figure.
@@ -78,8 +79,7 @@ These are the tasks [1 Point]:
 python part_5.py
 ```
 
-# ![Alt text]("/images/metrics.png")
-<img title="a title" alt="Alt text" src="/images/metrics.png">
+<img title="The Accuracy Metrics" alt="The Accuracy Metrics" src="/images/metrics.png">
 
 ## [OPTIONAL] Explore an alternative way to improve sentence encoder in terms of performance or efficiency [6 Points]
 
