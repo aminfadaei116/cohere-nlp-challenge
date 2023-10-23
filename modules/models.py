@@ -20,16 +20,15 @@ class Config(object):
     """
     A Configuration model containing all the configuration hyper-parameters
     """
-
     def __init__(self,
-                 vocab_size,
-                 hidden_size=768,
-                 num_hidden_layers=12,
-                 num_attention_heads=12,
-                 intermediate_size=3072,
-                 dropout_prob=0.9,
-                 max_position_embeddings=512,
-                 type_vocab_size=2,
+                 vocab_size,  # The size of the dictonary of words
+                 hidden_size=768,  # The hidden layer size
+                 num_hidden_layers=12,  # The number of hidden layers
+                 num_attention_heads=12,  # The hidden layer size
+                 intermediate_size=3072,  # The intermediate layer size
+                 dropout_prob=0.9,  # The drop out probability
+                 max_position_embeddings=512,  # The max size that position embedding could have
+                 type_vocab_size=2,  # The type vocab size
                  initializer_range=0.02):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -51,7 +50,12 @@ class Config(object):
 
 
 class LayerNorm(nn.Module):
-
+    """
+    Similar to `torch.nn.LayerNorm` this module applies Layer Normalization to the input
+    tensor along a specified dimension. Layer Normalization is a technique used
+    to normalize the activations of a layer, mitigating issues related to
+    internal covariate shift.
+    """
     def __init__(self, hidden_size, variance_epsilon=1e-12):
         super(LayerNorm, self).__init__()
         self.gamma = nn.Parameter(torch.ones(hidden_size))
@@ -90,7 +94,10 @@ class LayerNorm(nn.Module):
 
 
 class MLP(nn.Module):
-
+    """
+    The multi layer perceptron of the Bert model, consists of two linear
+    following with a GeLU activation function in between.
+    """
     def __init__(self, hidden_size, intermediate_size):
         super(MLP, self).__init__()
         self.dense_expansion = nn.Linear(hidden_size, intermediate_size)
@@ -103,6 +110,12 @@ class MLP(nn.Module):
 
 
 class Layer(nn.Module):
+    """
+    The Bert Layer in the transformer model, which consists of different
+    sections such as the linear layers for converting the key, query and value
+    to their embedding representation. Additionally having the self attention
+    part with some multi layer perceptron with normalization terms.
+    """
     def __init__(self, config):
         super(Layer, self).__init__()
 
@@ -118,13 +131,13 @@ class Layer(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         """
         Bug #2
-        This bug couldn't be spot easily since the self.all_head_size and config.hidden_size were holding the same 
+        This bug couldn't be spot easily since the self.all_head_size and config.hidden_size were holding the same
         value, but it you play with the hyper parameters of this model e.g., hidden_size and assign a odd number, you
         would be receiving errors.
-        
+
         Code Edit:
         >>
-        self.attn_out = nn.Linear(config.hidden_size, config.hidden_size) -> 
+        self.attn_out = nn.Linear(config.hidden_size, config.hidden_size) ->
         self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)
         """
         self.attn_out = nn.Linear(self.all_head_size, config.hidden_size)  # Edited line #2
@@ -134,23 +147,58 @@ class Layer(nn.Module):
         self.ln2 = LayerNorm(config.hidden_size)
 
     def split_heads(self, tensor, num_heads, attention_head_size):
+        """
+        Split the vector in to multi-heads.
+        :param tensor: torch.Tensor
+            The input tensor that needs to be splitted
+        :param num_heads: int
+            The number of heads in the multi-head attention model
+        :param attention_head_size: List
+            The size of each attention head
+        :return: torch.Tensor
+            The splitted tensor
+        """
         new_shape = tensor.size()[:-1] + (num_heads, attention_head_size)
         tensor = tensor.view(*new_shape)
         return tensor.permute(0, 2, 1, 3)
 
     def merge_heads(self, tensor, num_heads, attention_head_size):
+        """
+        Merge the mutiple heads into one single head.
+        :param tensor: torch.Tensor
+            The input tensor that needs to be resized
+        :param num_heads: int
+            The number of heads in the multi-head attention model
+        :param attention_head_size: List
+            The size of each attention head
+        :return:
+            The destination size of the merged multi-head.
+        """
         tensor = tensor.permute(0, 2, 1, 3).contiguous()
         new_shape = tensor.size()[:-2] + (num_heads * attention_head_size,)
         return tensor.view(new_shape)
 
     def attn(self, q, k, v, attention_mask):
+        """
+        The attention part of the Bert model.
+        :param q: torch.Tensor
+            The Query of the Transformer
+        :param k: torch.Tensor
+            The Key of the Transformer
+        :param v: torch.Tensor
+            The Value of the Transformer
+        :param attention_mask: torch.Tensor
+            A mask that tells which part of the input is empty token.
+        :return a: torch.Tensor
+            The output of the attention model in Bert
+        """
         mask = attention_mask == 1
         mask = mask.unsqueeze(1).unsqueeze(2)
 
         """
         Bug #3: The dimensions of the query and key must be re-arranged in a way that we are capable of multiplying them
         in each other. That is way we needed to transpose the key in a proper format.
-        
+
         Code Edit:
         >>
         s = torch.matmul(q, k) -> s = torch.matmul(q, k.transpose(-1, -2))
@@ -160,14 +208,14 @@ class Layer(nn.Module):
         s = s / math.sqrt(self.attention_head_size)
 
         """
-        Bug #4: Need to mask out the segments of the input in which don't have valid tokens (words), and since the 
-        model is going through a softmax function, it would be valid to replace the scores which didn't have a valid 
+        Bug #4: Need to mask out the segments of the input in which don't have valid tokens (words), and since the
+        model is going through a softmax function, it would be valid to replace the scores which didn't have a valid
         word into 0. Since the score goes though a softmax function we should replace the value with -inf. Initially
         the replacement was with +int, which was wrong.
-        
+
         Code Edit:
         >>
-        s = torch.where(mask, s, torch.tensor(float('inf'))) -> 
+        s = torch.where(mask, s, torch.tensor(float('inf'))) ->
         s = torch.where(mask, s, torch.tensor(float('-inf')))
         """
         s = torch.where(mask, s, torch.tensor(float('-inf')))  # Edited line #4
@@ -175,12 +223,12 @@ class Layer(nn.Module):
         """
         Bug #5
         In the original implementation of the model, if was required to apply softmax for the score vector, you can
-        refer to the transformer paper "Attention is all you need". But initially it was just a 'p=s', which is 
+        refer to the transformer paper "Attention is all you need". But initially it was just a 'p=s', which is
         incorrect, and must be replaced with a softmax function.
-        
+
         Code edit:
         >>
-        p = s -> 
+        p = s ->
         p = nn.functional.softmax(s, dim=-1)
         """
         p = nn.functional.softmax(s, dim=-1)  # Edited line #5
@@ -210,11 +258,11 @@ class Layer(nn.Module):
         """
 
         """
-        Bug #6.2: Similar to 6.1 the input of the second LayerNorm should also be the sum of the hidden state and the 
+        Bug #6.2: Similar to 6.1 the input of the second LayerNorm should also be the sum of the hidden state and the
         output of the previous LayerNorm.
         Code Edit:
         >>
-        m = self.ln2(m)  -> m = self.ln2(m + a) 
+        m = self.ln2(m)  -> m = self.ln2(m + a)
         >>
         """
         a = self.ln1(a + x)  # Edited line #6.1
@@ -227,6 +275,18 @@ class Layer(nn.Module):
 
 
 class Bert(nn.Module):
+    """
+    The BERT model was proposed in BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding
+    by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. It’s a bidirectional transformer pretrained
+    using a combination of masked language modeling objective and next sentence prediction on a large corpus
+    comprising the Toronto Book Corpus and Wikipedia.
+    :param config_dict: Config
+        The Configuration model containing all of the hyper-parameters.
+    :return x: torch.Tensor [B, NumberWord, Embedding_size]
+        The embedding representation of the input text.
+    :return o: torch.Tensor [B, Embedding_size]
+        The pooled embedding of the Bert model
+    """
     def __init__(self, config_dict):
         super(Bert, self).__init__()
         self.config = Config.from_dict(config_dict)
@@ -256,9 +316,9 @@ class Bert(nn.Module):
         """
         Bug #7
         In the original bert model the work embedding, position embeding and the token type embedding must be summed up
-        all together. Initially it these embedding were concatinated which resulted an error due to incopatibility of 
+        all together. Initially it these embedding were concatinated which resulted an error due to incopatibility of
         the dimensions in the next layers.
-        
+
         Code edit:
         >>>
         x = torch.cat((self.embeddings.token(input_ids),
@@ -279,7 +339,12 @@ class Bert(nn.Module):
         o = self.pooler(x[:, 0])
         return x, o
 
-    def load_model(self, path):
+    def load_model(self, path: str):
+        """
+        Load the weights of the model
+        :param path: str
+            The location which the model weights exist
+        """
         self.load_state_dict(torch.load(path))
         return self
 
@@ -301,10 +366,10 @@ class Softmax(torch.nn.Module):
 class BertClassifier(nn.Module):
     def __init__(self, pretrained_model: nn.Module, max_length: int, num_labels: int, pool: str = None):
         super(BertClassifier, self).__init__()
-
+        # Use the pretrained Bert model as base
         self.pretrained_model = pretrained_model.eval()
         self.pretrained_model.requires_grad = True
-
+        # Add a Softmax classifier
         self.softmax_classifier = Softmax(max_length * 3, num_labels)
         self.sf = nn.Softmax(dim=1)
         assert pool == 'mean' or pool == 'max' or pool is None, "Pooling method not valid!"

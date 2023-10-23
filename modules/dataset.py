@@ -1,9 +1,10 @@
 from torch.utils.data import DataLoader
+from typing import List
 
 
 class STSDataSet(DataLoader):
 
-    def __init__(self, score, sentence1, sentence2):
+    def __init__(self, score: List, sentence1, sentence2):
         assert len(score) == len(sentence1.data['input_ids']) and len(score) == len(sentence2.data['input_ids']), \
             "Sentences don't have the same size."
         self.score = score
@@ -22,7 +23,7 @@ class STSDataSet(DataLoader):
 
 class NLIDataSet(DataLoader):
 
-    def __init__(self, score, sentence1, sentence2):
+    def __init__(self, score: List, sentence1, sentence2):
         assert len(score) == len(sentence1.data['input_ids']) and len(score) == len(sentence2.data['input_ids']), \
             "Sentences don't have the same size."
         classes = {'contradiction': 0, 'neutral': 1, 'entailment': 2}
