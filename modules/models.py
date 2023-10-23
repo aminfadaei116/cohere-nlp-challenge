@@ -150,13 +150,13 @@ class Layer(nn.Module):
         """
         Split the vector in to multi-heads.
         :param tensor: torch.Tensor
-            The input tensor that needs to be splitted
+            The input tensor that needs to be split
         :param num_heads: int
             The number of heads in the multi-head attention model
         :param attention_head_size: List
             The size of each attention head
         :return: torch.Tensor
-            The splitted tensor
+            The split tensor
         """
         new_shape = tensor.size()[:-1] + (num_heads, attention_head_size)
         tensor = tensor.view(*new_shape)
