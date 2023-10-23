@@ -79,6 +79,7 @@ python part_5.py
 ```
 
 # ![Alt text]("/images/metrics.png")
+<img title="a title" alt="Alt text" src="/images/metrics.png">
 
 ## [OPTIONAL] Explore an alternative way to improve sentence encoder in terms of performance or efficiency [6 Points]
 
