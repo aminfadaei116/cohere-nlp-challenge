@@ -86,6 +86,7 @@ def cosine_sim(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 def eval_loop(model: nn.Module, eval_dataloader: DataLoader, device: str) -> List[Union[float, float]]:
     """
     The function that will evaluate the performance of the model and will return two pearson and spearman cosine error.
+    :rtype: object
     :param model: nn.Module
         The model that will be evaluated
     :param eval_dataloader: DataLoader
