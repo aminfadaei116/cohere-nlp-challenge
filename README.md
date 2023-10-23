@@ -6,7 +6,7 @@ Cohere's take-home test. Take a look at [python notebook]([https://website-name.
 
 Before anything we want to download the required datasets.
 
-```
+```console
 wget -P data https://sbert.net/datasets/stsbenchmark.tsv.gz
 wget -P data https://github.com/for-ai/bert/raw/master/bert_tiny.bin
 wget -P data 'https://sbert.net/datasets/AllNLI.tsv.gz'
