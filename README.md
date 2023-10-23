@@ -18,6 +18,10 @@ Tasks:
 - [7 points] Your goal is to get the code working. There are 7 bugs in the code, some of them lead to error in the code but some of them are designed to impair test accuracy but not break the code. You will one point for each of the 7 bugs you find.
 - [1 points] We will give extra points for also adding improved documentation to each of the functions we introduce in this section, and for describing the fixes to the bugs.
 
+```
+python part_1.py
+```
+
 ## Coding Challenge Part 2: Evaluate a pretrained BERT model on STS benchmark [4 points]
 
 In this part, we are going to evaluate a pretrained BERT model on STS benchmark without applying any additional training. For the evaluation we provide Pearson/Spearman correlation functions and cosine similarity method.
@@ -25,6 +29,10 @@ In this part, we are going to evaluate a pretrained BERT model on STS benchmark 
 Tasks:
 - [2 Points] Prepare an evaluation data loader and evaluation loop: Read in the STS data, tokenize it as shown in the example, generate the dataloader and return Pearson and Spearman correlation scores.
 - [1 Point] Implement cosine similarity function, explained as TODO
+
+```
+python part_2.py
+```
 
 ## Coding Challenge Part 3: Learning sentence embeddings using Natural Language Inference (NLI) dataset [4 Points]
 
@@ -35,6 +43,9 @@ Tasks:
 - [2 Point] Prepare a training dataloader and training loop: Read in NLI data, tokenize and generate the corresponding data loader
 - [2 Point] BertClassifier: Construct a model that uses above method. Please follow the architecture illustrated in the given figure.
 
+```
+python part_3.py
+```
 
 ## Coding Challenge Part 4: Learning sentence embedding using a contrastive approach based on NLI dataset [3 Points]
 
@@ -44,11 +55,19 @@ Tasks [3 Points] :
 - Generate a dataloader if this is required for your approach
 - Construct a BERT based model using a contrastive method
 
+```
+python part_4.py
+```
+
 ## Coding Challenge Part 5: Comparison [1 Point]
 
 These are the tasks [1 Point]:
 - Plot the result for each model
 - Explain the difference between methods and their impact on the result and comparison
+
+```
+python part_5.py
+```
 
 #Image
 
@@ -59,3 +78,8 @@ Potential directions:
 - Improve the efficiency during fine-tuning in terms of memory or training time
 - Use different machine learning methods that leverages other resources such as auxillary/teacher models
 - Use different datasets with other training objectives
+
+```
+python part_bonus.py
+```
+
