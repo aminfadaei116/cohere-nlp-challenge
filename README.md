@@ -1,16 +1,25 @@
 # Cohere-NLP-Challenge
 
-Cohere's take-home test. Take a look at [python notebook]([https://website-name.com](https://github.com/aminfadaei116/cohere-nlp-challenge/blob/c524d7b7c6bb3d28322c6b2f3d837de38d05e8f3/Amin_Fadaeinejad_C4AIScholarsChallenge.ipynb)https://github.com/aminfadaei116/cohere-nlp-challenge/blob/c524d7b7c6bb3d28322c6b2f3d837de38d05e8f3/Amin_Fadaeinejad_C4AIScholarsChallenge.ipynb) for the final submission.
+Cohere's take-home test. Take a look at [python notebook]([https://website-name.com](https://github.com/aminfadaei116/cohere-nlp-challenge/blob/c524d7b7c6bb3d28322c6b2f3d837de38d05e8f3/Amin_Fadaeinejad_C4AIScholarsChallenge.ipynb)https://github.com/aminfadaei116/cohere-nlp-challenge/blob/c524d7b7c6bb3d28322c6b2f3d837de38d05e8f3/Amin_Fadaeinejad_C4AIScholarsChallenge.ipynb).
 
-### If you also found it useful, please star this repo! Thanks
+### If you also found it helpful, please star this repo! Thanks
 
-Before anything we want to download the required datasets.
+Before anything, we want to download the required datasets.
 
 ```console
 wget -P data https://sbert.net/datasets/stsbenchmark.tsv.gz
 wget -P data https://github.com/for-ai/bert/raw/master/bert_tiny.bin
 wget -P data 'https://sbert.net/datasets/AllNLI.tsv.gz'
+```
 
+## Install the requirements
+
+```
+pip install transformers
+pip install torch
+pip install numpy
+pip install pandas
+pip install scipy
 ```
 ## Coding Challenge Part 1: Debugging custom BERT code [7 points]
 
@@ -38,7 +47,7 @@ python part_2.py
 
 Conneue et al. (2018) showed that a good sentence embedding model can be learned using NLI dataset. This method proposes using a shared encoder to encode both premise and hypothesis and then combine them before using a softmax classifier. Here , we will use a pretrained BERT model as shared encoder.
 
-# Image
+# [Alt text]("/images/metrics.png")
 Tasks:
 - [2 Point] Prepare a training dataloader and training loop: Read in NLI data, tokenize and generate the corresponding data loader
 - [2 Point] BertClassifier: Construct a model that uses above method. Please follow the architecture illustrated in the given figure.
@@ -69,7 +78,7 @@ These are the tasks [1 Point]:
 python part_5.py
 ```
 
-#Image
+# ![Alt text]("/images/metrics.png")
 
 ## [OPTIONAL] Explore an alternative way to improve sentence encoder in terms of performance or efficiency [6 Points]
 
